@@ -514,11 +514,11 @@ class Onedrive {
             }
 
             $api = $this->api_url . '/sites/root';
-            $arr = curl('GET', $api, '', [ 'Authorization' => 'Bearer ' . $this->access_token ]);
+            $arr = $this->MSAPI('GET', $api);
             $Tenant = json_decode($arr['body'], true)['webUrl'];
 
             $api = $this->api_url . '/me/followedSites';
-            $arr = curl('GET', $api, '', [ 'Authorization' => 'Bearer ' . $this->access_token ]);
+            $arr = $this->MSAPI('GET', $api);
             if (!($arr['stat']==200||$arr['stat']==403||$arr['stat']==400||$arr['stat']==404)) return message($arr['stat'] . json_encode(json_decode($arr['body']), JSON_PRETTY_PRINT), 'Get followedSites', $arr['stat']);
             error_log1($arr['body']);
             $sites = json_decode($arr['body'], true)['value'];
@@ -812,7 +812,7 @@ class Onedrive {
         $i=0;
         $response = [];
         while ($url!=''&&$response['stat']!=200&&$i<4) {
-            $response = curl('GET', $url, false, ['Authorization' => 'Bearer ' . $this->access_token]);
+            $response = $this->MSAPI('GET', $url);
             $i++;
         }
         if ($response['stat']!=200) {
@@ -851,7 +851,7 @@ class Onedrive {
                 if (substr($url,-1)=='/') $url=substr($url,0,-1);
             }
             $url .= ':/thumbnails/0/medium';
-            $files = json_decode(curl('GET', $url, false, ['Authorization' => 'Bearer ' . $this->access_token])['body'], true);
+            $files = json_decode($this->MSAPI('GET', $url)['body'], true);
             if (isset($files['url'])) {
                 savecache('thumb_' . $path, $files['url'], $this->disktag);
                 $thumb_url = $files['url'];
@@ -900,6 +900,19 @@ class Onedrive {
             if ($fileinfo['size']>10*1024*1024) $this->MSAPI('PUT', path_format($path . '/' . $cachefilename), json_encode($fileinfo, JSON_PRETTY_PRINT));
         }
         return output($response['body'], $response['stat']);
+    }
+    public function getDiskSpace() {
+        if (!($diskSpace = getcache('diskSpace', $this->disktag))) {
+            $url = $this->api_url . $this->ext_api_url;
+            if (substr($url, -5)=='/root') $url = substr($url, 0, -5);
+            else return $url;
+            $response = json_decode($this->MSAPI('GET', $url)['body'], true)['quota'];
+            $used = size_format($response['used']);
+            $total = size_format($response['total']);
+            $diskSpace = $used . ' / ' . $total;
+            savecache('diskSpace', $diskSpace, $this->disktag);
+        }
+        return $diskSpace;
     }
 
     protected function MSAPI($method, $path, $data = '')
@@ -977,7 +990,11 @@ class Onedrive {
         if ($response['stat']==429) {
             $res = json_decode($response['body'], true);
             $retryAfter = $res['error']['retryAfterSeconds'];
-            setConfig(['activeLimit' => time()+$retryAfter], $this->disktag);
+            $retryAfter_n = (int)$retryAfter;
+            if ($retryAfter_n>0) {
+                $tmp1['activeLimit'] = $retryAfter_n + time();
+                setConfig($tmp1, $this->disktag);
+            }
         }
         curl_close($ch);
         error_log1($response['stat'].'

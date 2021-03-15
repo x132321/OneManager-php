@@ -479,8 +479,7 @@
 <!--MdRequireStart--><link rel="stylesheet" href="//unpkg.zhimg.com/github-markdown-css@3.0.1/github-markdown.css">
 <script type="text/javascript" src="//unpkg.zhimg.com/marked@0.6.2/marked.min.js"></script><!--MdRequireEnd-->
 <!--GuestUploadStart--><script type="text/javascript" src="//cdn.bootcss.com/spark-md5/3.0.0/spark-md5.min.js"></script><!--GuestUploadEnd-->
-<!--LoginStart--><script src="https://cdn.bootcdn.net/ajax/libs/js-sha1/0.6.0/sha1.min.js"></script><!--LoginEnd-->
-<!--AliyundriveUploadJsStart--><script src="https://cdn.bootcdn.net/ajax/libs/js-sha1/0.6.0/sha1.min.js"></script><!--AliyundriveUploadJsEnd-->
+<!--AliyundriveUploadJsStart--><script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.min.js"></script><!--AliyundriveUploadJsEnd-->
 <!--IsFileStart--><!--IspdfFileStart--><script src="//cdn.bootcss.com/pdf.js/2.3.200/pdf.min.js"></script><!--IspdfFileEnd--><!--IsFileEnd-->
 <!--ListEnd-->
 <script type="text/javascript">
@@ -493,6 +492,30 @@
         document.cookie='language='+str+'; path=/; '+expires;
         location.href = location.href;
     }
+<!--LoginStart-->
+    function login() {
+        document.getElementById('mask').style.display='';
+            //document.getElementById('mask').style.width=document.documentElement.scrollWidth+'px';
+        document.getElementById('mask').style.height=document.documentElement.scrollHeight<window.innerHeight?window.innerHeight:document.documentElement.scrollHeight+'px';
+        document.getElementById('login_div').style.display='';
+        document.getElementById('login_div').style.left=(document.body.clientWidth-document.getElementById('login_div').offsetWidth)/2 +'px';
+        document.getElementById('login_div').style.top=(window.innerHeight-document.getElementById('login_div').offsetHeight)/2+document.body.scrollTop +'px';
+        document.getElementById('login_input').focus();
+    }
+    function sha1loginpass(f) {
+        if (f.password1.value=="") return false;
+        try {
+            timestamp = new Date().getTime() + "";
+            timestamp = timestamp.substr(0, timestamp.length-3);
+            f.timestamp.value = timestamp;
+            f.password1.value = sha1(timestamp + "" + f.password1.value);
+            return true;
+        } catch {
+            alert("sha1.js not loaded.");
+            return false;
+        }
+    }
+<!--LoginEnd-->
 <!--ListStart-->
 
 <!--IsFileStart-->
@@ -931,7 +954,7 @@
                     getuplink(i);
                 }
             }
-            xhr1.send('upbigfilename='+ encodeURIComponent(upbigfilename) +'&filesize='+ file.size +'&filelastModified='+ file.lastModified +'&filemd5='+ filemd5);
+            xhr1.send('upbigfilename='+ upbigfilename +'&filesize='+ file.size +'&filelastModified='+ file.lastModified +'&filemd5='+ filemd5);
 <!--GuestStart-->
             }
         }
@@ -1088,69 +1111,85 @@
                 return;
             }*/
             var upbigfilename = encodeURIComponent((file.webkitRelativePath||file.name));
+            var spark = sha1.create();
             var reader = new FileReader();
-            reader.onprogress = function(e) {
-                td2.innerText = '计算SHA1... ' + (e.loaded*100/file.size).toFixed(2) + " %";
+            var chunksize=10*1024*1024;
+            var asize = 0;
+            var filesha1;
+            function readblob(start) {
+                var end=start+chunksize;
+                var blob = file.slice(start,end);
+                reader.readAsArrayBuffer(blob);
             }
-            reader.onload = function(e) {
-                var filesha1 = sha1(this.result);
-<!--GuestStart-->
-                function getext(str) {
-                    let p = str.lastIndexOf('.');
-                    if (p===-1) return '';
-                    if (p===0) return '';
-                    return str.substr(p);
-                }
-                var ext = getext(file.webkitRelativePath||file.name);
-                upbigfilename = filesha1 + ext;
-<!--GuestEnd-->
-                while (upbigfilename.indexOf('%2F')>0) upbigfilename = upbigfilename.replace('%2F', '/');
-                td2.innerHTML='<!--constStr@GetUploadLink--> ...';
-                var html = JSON.parse(localStorage.getItem(filesha1));
-                //console.log(html);
-                if (html!==null && ('part_info_list' in html)) {
-                    td2.innerHTML='<!--constStr@UploadStart--> ...';
-                    binupfile(file, html, timea+'_'+i, upbigfilename, filesha1, chunksize);
+            readblob(asize);
+
+            reader.onload = function(e){
+                td2.innerHTML='<!--constStr@Calculate--> SHA1: '+(asize*100/file.size).toFixed(2)+'%';
+                var binary = this.result;
+                spark.update(binary);
+                asize += chunksize;
+                if (asize < file.size) {
+                    readblob(asize);
                 } else {
-                    var xhr1 = new XMLHttpRequest();
-                    xhr1.open("POST", '?action=upbigfile');
-                    //xhr1.setRequestHeader("Content-Type","application/x-www-form-urlencoded;charset=utf-8");
-                    xhr1.setRequestHeader('x-requested-with','XMLHttpRequest');
-                    xhr1.onload = function(e){
-                        //console.log(xhr1.status+xhr1.responseText);
-                        td2.innerHTML='<font color="red">'+xhr1.responseText+'</font>';
-                        if (xhr1.status==201) {
-                            if (xhr1.responseText=='') {
-                                getuplink(i,1);
-                                return;
-                            }
-                            var html=JSON.parse(xhr1.responseText);
-                            //console.log(html);
-                            if (!html['part_info_list']) {
-                                if (html.name!='') {
-                                    if (html.exist==true) td2.innerHTML=html.name+' 文件名已有';
-                                    else if (html.rapid_upload==true) td2.innerHTML=html.name+' 秒传';
-                                    else td2.innerHTML='<font color="red">'+xhr1.responseText+'</font><br>';
-                                    td1.innerHTML='<div style="color:green"><a href="<!--base_disk_path--><!--Path-->'+upbigfilename+'?preview" id="upfile_a_'+tdnum+'" target="_blank">'+td1.innerHTML+'</a><br><a href="<!--base_disk_path--><!--Path-->'+upbigfilename+'" id="upfile_a1_'+tdnum+'"></a><!--constStr@UploadComplete--><button onclick="CopyAllDownloadUrl(\'#upfile_a1_'+tdnum+'\');" id="upfile_cpbt_'+tdnum+'" <!--AdminStart--> style="display:none"<!--AdminEnd--> ><!--constStr@CopyUrl--></button></div>';
-                                } else {
-                                    td2.innerHTML='<font color="red">'+xhr1.responseText+'</font><br>';
-                                }
-                            } else {
-                                td2.innerHTML='<!--constStr@UploadStart--> ...';
-                                //console.log(html);
-                                localStorage.setItem(filesha1, JSON.stringify(html));
-                                binupfile(file, html, timea+'_'+i, upbigfilename, filesha1, chunksize);
-                            }
-                        }
-                        if (i<files.length-1) {
-                            i++;
-                            getuplink(i);
-                        }
+                    filesha1 = spark.hex();
+                    td2.innerHTML='SHA1: ' + filesha1;
+<!--GuestStart-->
+                    function getext(str) {
+                        let p = str.lastIndexOf('.');
+                        if (p===-1) return '';
+                        if (p===0) return '';
+                        return str.substr(p);
                     }
-                    xhr1.send('upbigfilename='+ encodeURIComponent(upbigfilename) +'&filesize='+ file.size +'&filelastModified='+ file.lastModified + '&filesha1=' + filesha1 + '&chunksize=' + chunksize);
+                    var ext = getext(file.webkitRelativePath||file.name);
+                    upbigfilename = filesha1 + ext;
+<!--GuestEnd-->
+                    while (upbigfilename.indexOf('%2F')>0) upbigfilename = upbigfilename.replace('%2F', '/');
+                    td2.innerHTML='<!--constStr@GetUploadLink--> ...';
+                    var html = JSON.parse(localStorage.getItem(filesha1));
+                    //console.log(html);
+                    if (html!==null && ('part_info_list' in html)) {
+                        td2.innerHTML='<!--constStr@UploadStart--> ...';
+                        binupfile(file, html, timea+'_'+i, upbigfilename, filesha1, chunksize);
+                    } else {
+                        var xhr1 = new XMLHttpRequest();
+                        xhr1.open("POST", '?action=upbigfile');
+                        //xhr1.setRequestHeader("Content-Type","application/x-www-form-urlencoded;charset=utf-8");
+                        xhr1.setRequestHeader('x-requested-with','XMLHttpRequest');
+                        xhr1.onload = function(e){
+                            //console.log(xhr1.status+xhr1.responseText);
+                            td2.innerHTML='<font color="red">'+xhr1.responseText+'</font>';
+                            if (xhr1.status==201) {
+                                if (xhr1.responseText=='') {
+                                    getuplink(i,1);
+                                    return;
+                                }
+                                var html=JSON.parse(xhr1.responseText);
+                                //console.log(html);
+                                if (!html['part_info_list']) {
+                                    if (html.name!='') {
+                                        if (html.exist==true) td2.innerHTML=html.name+' 文件名已有';
+                                        else if (html.rapid_upload==true) td2.innerHTML=html.name+' 秒传';
+                                        else td2.innerHTML='<font color="red">'+xhr1.responseText+'</font><br>';
+                                        td1.innerHTML='<div style="color:green"><a href="<!--base_disk_path--><!--Path-->'+upbigfilename+'?preview" id="upfile_a_'+tdnum+'" target="_blank">'+td1.innerHTML+'</a><br><a href="<!--base_disk_path--><!--Path-->'+upbigfilename+'" id="upfile_a1_'+tdnum+'"></a><!--constStr@UploadComplete--><button onclick="CopyAllDownloadUrl(\'#upfile_a1_'+tdnum+'\');" id="upfile_cpbt_'+tdnum+'" <!--AdminStart--> style="display:none"<!--AdminEnd--> ><!--constStr@CopyUrl--></button></div>';
+                                    } else {
+                                        td2.innerHTML='<font color="red">'+xhr1.responseText+'</font><br>';
+                                    }
+                                } else {
+                                    td2.innerHTML='<!--constStr@UploadStart--> ...';
+                                    //console.log(html);
+                                    localStorage.setItem(filesha1, JSON.stringify(html));
+                                    binupfile(file, html, timea+'_'+i, upbigfilename, filesha1, chunksize);
+                                }
+                            }
+                            if (i<files.length-1) {
+                                i++;
+                                getuplink(i);
+                            }
+                        }
+                        xhr1.send('upbigfilename='+ upbigfilename +'&filesize='+ file.size +'&filelastModified='+ file.lastModified + '&filesha1=' + filesha1 + '&chunksize=' + chunksize);
+                    }
                 }
             }
-            reader.readAsArrayBuffer(file);
         }
         uploadbuttonshow();
     }
@@ -1518,29 +1557,11 @@
     }
 <!--IsFolderEnd-->
 <!--AdminEnd-->
-<!--LoginStart-->
-    function login() {
-        document.getElementById('mask').style.display='';
-            //document.getElementById('mask').style.width=document.documentElement.scrollWidth+'px';
-        document.getElementById('mask').style.height=document.documentElement.scrollHeight<window.innerHeight?window.innerHeight:document.documentElement.scrollHeight+'px';
-        document.getElementById('login_div').style.display='';
-        document.getElementById('login_div').style.left=(document.body.clientWidth-document.getElementById('login_div').offsetWidth)/2 +'px';
-        document.getElementById('login_div').style.top=(window.innerHeight-document.getElementById('login_div').offsetHeight)/2+document.body.scrollTop +'px';
-        document.getElementById('login_input').focus();
-    }
-    function sha1loginpass(f) {
-        if (f.password1.value=="") return false;
-        timestamp = new Date().getTime() + "";
-        timestamp = timestamp.substr(0, timestamp.length-3);
-        f.timestamp.value = timestamp;
-        f.password1.value = sha1(timestamp + "" + f.password1.value);
-        return true;
-    }
-<!--LoginEnd-->
 <!--EncryptedStart-->
     document.getElementById('password1').focus();
 <!--EncryptedEnd-->
 </script>
 <script src="//unpkg.zhimg.com/ionicons@4.4.4/dist/ionicons.js"></script>
+<!--LoginStart--><script src="https://cdn.bootcss.com/js-sha1/0.6.0/sha1.min.js"></script><!--LoginEnd-->
 <!--customScript-->
 </html>
