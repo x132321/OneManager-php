@@ -235,7 +235,7 @@ function install()
             url += location.pathname;
             if (url.substr(-1)!="/") url += "/";
             url += "app.json";
-            //alert(url);
+            url += "?" + Date.now();
             var xhr4 = new XMLHttpRequest();
             xhr4.open("GET", url);
             xhr4.setRequestHeader("x-requested-with","XMLHttpRequest");
